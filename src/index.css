@@ -1,0 +1,28 @@
+/* OncoTriage — Eagle Reaper
+   Base reset. All real styles injected via App.js CSS string.
+   This file just prevents Tailwind from overriding CSS variables. */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #070A0F;
+  color: #E8EDF5;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent Tailwind preflight from resetting input/button styles */
+input, button, select, textarea {
+  font-family: inherit;
+}
+
+/* Keyframe used in Analysis.js scan-line animation */
+@keyframes scanline {
+  0%   { top: -10%; }
+  100% { top: 110%; }
+}

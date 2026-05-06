@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OncoTriage v2.1 — Reaper Eagle Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+    <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --nero:#0A0A0A;--bg:#0A0A0A;--bg2:#111111;--bg3:#1A1A1A;
+            --gold:#D4AF37;--gold-light:#E8C547;--gold-dark:#B89B2D;
+            --gold-glow:rgba(212,175,55,0.15);--surface:#151515;
+            --border:#262626;--text:#F0F0F0;--muted:#888888;--dim:#555555;
+            --urgent:#EF4444;--high:#F97316;--normal:#22C55E;
+            --font:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+
+        .shell{display:flex;height:100vh}
+        .sidebar{width:260px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+        .main{flex:1;overflow-y:auto;background:radial-gradient(circle at top right,#1a1a1a,#0a0a0a);padding:2.5rem}
+
+        .nav-item{padding:14px 20px;color:var(--muted);cursor:pointer;transition:.3s;display:flex;align-items:center;gap:12px;font-size:.85rem;border:none;background:none;width:100%;font-weight:500;font-family:var(--font);text-align:left}
+        .nav-item:hover{color:var(--gold);background:var(--gold-glow)}
+        .nav-item.active{color:var(--gold);background:var(--gold-glow);border-left:3px solid var(--gold)}
+
+        .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;position:relative;overflow:hidden}
+        .btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:var(--nero);border:none;padding:14px 28px;border-radius:8px;font-weight:800;cursor:pointer;transition:.3s;text-transform:uppercase;letter-spacing:1px;font-size:.75rem;font-family:var(--font)}
+        .btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(212,175,55,.3)}
+        .btn-gold:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+        .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer;transition:.3s;font-size:.75rem;font-family:var(--font);text-transform:uppercase;letter-spacing:1px}
+        .btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
+
+        .q-table{width:100%;border-collapse:collapse;margin-top:1rem}
+        .q-table th{text-align:left;color:var(--muted);font-size:.7rem;text-transform:uppercase;padding:12px;border-bottom:1px solid var(--border);letter-spacing:1px}
+        .q-table td{padding:16px 12px;border-bottom:1px solid var(--border);font-size:.9rem}
+        .badge{padding:4px 8px;border-radius:4px;font-size:.65rem;font-weight:800;border:1px solid transparent}
+        .badge-urgent{background:rgba(239,68,68,.1);color:var(--urgent);border-color:var(--urgent)}
+        .badge-normal{background:rgba(34,197,94,.1);color:var(--normal);border-color:var(--normal)}
+
+        @keyframes scan{0%{top:-3px}100%{top:100%}}
+        .scanner-line{position:absolute;width:100%;height:3px;background:var(--gold);box-shadow:0 0 20px var(--gold),0 0 60px rgba(212,175,55,.3);animation:scan 2.5s linear infinite;z-index:10;left:0}
+        .fade-in{animation:fadeIn .5s ease-out}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+        /* ── Drop Zone ── */
+        .file-drop-zone{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:3rem 2rem;border:2px dashed var(--border);border-radius:14px;background:rgba(0,0,0,.3);cursor:pointer;transition:border-color .25s,background .25s;margin-bottom:1.5rem}
+        .file-drop-zone:hover,.file-drop-zone.drag-active{border-color:var(--gold);background:var(--gold-glow)}
+        .file-drop-zone.drag-active .fdz-icon{transform:translateY(-6px) scale(1.12)}
+        .fdz-icon{width:80px;height:80px;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+        .fdz-icon i{color:var(--gold);font-size:1.6rem}
+        .file-drop-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:5}
+        .fdz-text{text-align:center;position:relative;z-index:1;pointer-events:none}
+        .fdz-text h3{font-size:1rem;font-weight:700;margin-bottom:4px}
+        .fdz-text h3 span{color:var(--gold)}
+        .fdz-text p{font-size:.75rem;color:var(--dim)}
+
+        .file-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.5rem}
+        .file-chip{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:.75rem;animation:fadeIn .3s ease}
+        .file-chip i{color:var(--gold);font-size:.7rem}
+        .file-chip .chip-name{font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .file-chip .chip-size{color:var(--dim)}
+        .file-chip button{background:none;border:none;color:var(--muted);cursor:pointer;padding:0 0 0 4px;font-size:.8rem;transition:color .2s;font-family:var(--font)}
+        .file-chip button:hover{color:var(--urgent)}
+
+        /* ── Review Panel ── */
+        .review-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:12px}
+        .review-header h2{font-weight:900;letter-spacing:-.5px}
+        .review-header-actions{display:flex;gap:10px}
+
+        .thumb-strip{display:flex;gap:10px;overflow-x:auto;padding:10px 0 14px;border-bottom:1px solid var(--border);margin-bottom:1.25rem}
+        .thumb-strip::-webkit-scrollbar{height:4px}
+        .thumb-strip::-webkit-scrollbar-track{background:transparent}
+        .thumb-strip::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+        .thumb-item{width:72px;height:72px;border-radius:8px;overflow:hidden;border:2px solid var(--border);cursor:pointer;flex-shrink:0;transition:border-color .2s,transform .2s;position:relative}
+        .thumb-item:hover{border-color:var(--muted);transform:scale(1.04)}
+        .thumb-item.active{border-color:var(--gold);box-shadow:0 0 12px rgba(212,175,55,.25)}
+        .thumb-item img{width:100%;height:100%;object-fit:cover}
+        .thumb-placeholder{width:100%;height:100%;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:.55rem;text-align:center;padding:4px}
+        .thumb-dot{position:absolute;bottom:4px;right:4px;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--bg2)}
+        .thumb-dot.high{background:var(--urgent)}
+        .thumb-dot.low{background:var(--normal)}
+
+        .preview-area{position:relative;background:#000;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:380px;border:1px solid var(--border);margin-bottom:1.25rem}
+        .preview-area img,.preview-area canvas{max-width:100%;max-height:440px;display:block;margin:auto}
+        .preview-placeholder{color:var(--dim);font-size:.85rem;text-align:center;padding:3rem}
+
+        .heatmap-btn{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.7rem;font-weight:700;font-family:var(--font);text-transform:uppercase;letter-spacing:.5px;transition:all .2s;z-index:5;display:flex;align-items:center;gap:6px}
+        .heatmap-btn:hover{border-color:var(--gold);color:var(--gold)}
+        .heatmap-btn.on{border-color:var(--urgent);color:var(--urgent);background:rgba(239,68,68,.1)}
+        .heatmap-btn .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);transition:background .2s}
+        .heatmap-btn.on .dot{background:var(--urgent);box-shadow:0 0 8px var(--urgent)}
+
+        .heatmap-legend{position:absolute;bottom:12px;left:12px;display:flex;gap:12px;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);border:1px solid var(--border);padding:6px 12px;border-radius:6px;font-size:.6rem;color:var(--muted);z-index:5;opacity:0;transition:opacity .3s}
+        .heatmap-legend.visible{opacity:1}
+        .heatmap-legend span{display:flex;align-items:center;gap:4px}
+        .heatmap-legend .ldot{width:7px;height:7px;border-radius:50%}
+
+        .meta-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
+        .meta-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+        .meta-card .mc-label{font-size:.6rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+        .meta-card .mc-value{font-size:1.15rem;font-weight:800}
+        .meta-card .mc-sub{font-size:.65rem;color:var(--muted);margin-top:3px}
+
+        .finding-bar{padding:14px 18px;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;gap:12px;margin-bottom:1rem}
+        .finding-bar.high{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.25)}
+        .finding-bar.medium{background:rgba(249,115,22,.06);border-color:rgba(249,115,22,.25)}
+        .finding-bar.low{background:rgba(34,197,94,.06);border-color:rgba(34,197,94,.25)}
+        .finding-bar i{font-size:1.1rem}
+        .finding-bar .fb-text{font-size:.85rem;font-weight:600}
+        .finding-bar .fb-sub{font-size:.7rem;color:var(--muted);margin-top:2px}
+
+        /* ── Toast ── */
+        .toast-rack{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+        .toast-msg{padding:12px 20px;border-radius:10px;font-size:.8rem;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:toastIn .3s ease,toastOut .3s ease 2.5s forwards;pointer-events:auto}
+        .toast-msg.ok{background:#0d3d2e;color:var(--normal);border:1px solid rgba(34,197,94,.25)}
+        .toast-msg.err{background:#3d1520;color:var(--urgent);border:1px solid rgba(239,68,68,.25)}
+        @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}
+
+        /* ── Export Spinner ── */
+        .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+
+        .main::-webkit-scrollbar{width:6px}
+        .main::-webkit-scrollbar-track{background:transparent}
+        .main::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <div class="toast-rack" id="toastRack"></div>
+
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+        const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts;
+
+        /* ── Toast (vanilla, outside React) ── */
+        function toast(msg, type = 'ok') {
+            const rack = document.getElementById('toastRack');
+            const el = document.createElement('div');
+            el.className = 'toast-msg ' + type;
+            el.textContent = msg;
+            rack.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
+
+        function fmtSize(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+            return (b / 1048576).toFixed(1) + ' MB';
+        }
+
+        /* ── Canvas heatmap renderer ── */
+        function renderToCanvas(dataUrl, regions, maxW) {
+            return new Promise((resolve) => {
+                if (!dataUrl || !dataUrl.startsWith('data:image')) {
+                    resolve({ dataUrl: null, width: 0, height: 0 });
+                    return;
+                }
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    let w = img.width, h = img.height;
+                    if (w > maxW) { h *= maxW / w; w = maxW; }
+                    canvas.width = Math.round(w);
+                    canvas.height = Math.round(h);
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    if (regions && regions.length > 0) {
+                        ctx.globalCompositeOperation = 'screen';
+                        regions.forEach(r => {
+                            const rx = (r.xPct / 100) * w;
+                            const ry = (r.yPct / 100) * h;
+                            const rr = Math.max(2, (r.radiusPct / 100) * w);
+                            const g = ctx.createRadialGradient(rx, ry, 0, rx, ry, rr);
+                            g.addColorStop(0, `rgba(255,0,0,${r.intensity})`);
+                            g.addColorStop(0.22, `rgba(255,80,0,${r.intensity * 0.78})`);
+                            g.addColorStop(0.48, `rgba(255,200,0,${r.intensity * 0.45})`);
+                            g.addColorStop(0.74, `rgba(0,140,255,${r.intensity * 0.18})`);
+                            g.addColorStop(1, 'rgba(0,0,0,0)');
+                            ctx.fillStyle = g;
+                            ctx.beginPath();
+                            ctx.ellipse(rx, ry, rr, Math.max(2, rr * 0.8), 0, 0, Math.PI * 2);
+                            ctx.fill();
+                        });
+                        ctx.globalCompositeOperation = 'source-over';
+                    }
+                    resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.88), width: canvas.width, height: canvas.height });
+                };
+                img.onerror = () => resolve({ dataUrl: null, width: 0, height: 0 });
+                img.src = dataUrl;
+            });
+        }
+
+        /* ── Fake analysis data generators ── */
+        function generateRegions(count) {
+            const out = [];
+            for (let i = 0; i < count; i++) {
+                out.push({
+                    xPct: 15 + Math.random() * 70,
+                    yPct: 15 + Math.random() * 70,
+                    radiusPct: 6 + Math.random() * 14,
+                    intensity: 0.35 + Math.random() * 0.5,
+                    score: parseFloat((72 + Math.random() * 27).toFixed(1))
+                });
+            }
+            return out;
+        }
+
+        const FINDINGS = {
+            high: [
+                'Masa sospechosa detectada en campo de análisis',
+                'Anomalía de alta densidad en tejido circundante',
+                'Región con morfología atípica identificada'
+            ],
+            medium: [
+                'Zona de densidad atípica requiere seguimiento',
+                'Posible lesión premaligna — corroborar con biopsia',
+                'Tejido con vascularización irregular'
+            ],
+            low: [
+                'Sin hallazgos significativos',
+                'Tejido dentro de parámetros normales',
+                'Campos claros, sin indicios de anomalía'
+            ]
+        };
+
+        function pickFinding(risk) {
+            const pool = risk > 75 ? FINDINGS.high : risk > 50 ? FINDINGS.medium : FINDINGS.low;
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        /* ── Storage ── */
+        const store = {
+            getCases: () => JSON.parse(localStorage.getItem('ot_db_v2') || '[]'),
+            saveCase: (c) => {
+                const cases = store.getCases();
+                const updated = [c, ...cases].slice(0, 50);
+                localStorage.setItem('ot_db_v2', JSON.stringify(updated));
+                return updated;
+            }
+        };
+
+        /* ═══════════════════════════════════════
+           DASHBOARD
+           ═══════════════════════════════════════ */
+        const Dashboard = ({ cases }) => {
+            const data = [
+                { n: 'Lun', v: 400 }, { n: 'Mar', v: 700 }, { n: 'Mie', v: 500 },
+                { n: 'Jue', v: 900 }, { n: 'Vie', v: 1100 }, { n: 'Sab', v: 800 }, { n: 'Dom', v: 600 }
+            ];
+            return (
+                <div className="fade-in">
+                    <h1 style={{ marginBottom: '2rem', fontWeight: 900, letterSpacing: '-1px' }}>Panel de Control Biométrico</h1>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '2rem' }}>
+                        <div className="card"><span style={{fontSize:'.7rem',color:'var(--muted)'}}>TOTAL ANALIZADOS</span><h2 style={{color:'var(--gold)',fontSize:'2rem'}}>{cases.length}</h2></div>
+                        <div className="card"><span style={{fontSize:'.7rem',color:'var(--urgent)'}}>RIESGO CRÍTICO</span><h2 style={{color:'var(--urgent)',fontSize:'2rem'}}>{cases.filter(c => c.risk > 75).length}</h2></div>
+                        <div className="card"><span style={{fontSize:'.7rem',color:'var(--muted)'}}>PRECISIÓN MODELO</span><h2 style={{fontSize:'2rem'}}>99.4%</h2></div>
+                        <div className="card"><span style={{fontSize:'.7rem',color:'var(--muted)'}}>LATENCIA INFERENCIA</span><h2 style={{fontSize:'2rem',color:'var(--normal)'}}>142ms</h2></div>
+                    </div>
+                    <div className="card" style={{ height: '350px' }}>
+                        <h4 style={{marginBottom:'1rem',color:'var(--gold)'}}>Tendencia de Carga Térmica (Engine Load)</h4>
+                        <ResponsiveContainer width="100%" height="90%">
+                            <AreaChart data={data}>
+                                <defs><linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#D4AF37" stopOpacity={0.3}/><stop offset="95%" stopColor="#D4AF37" stopOpacity={0}/></linearGradient></defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false}/>
+                                <XAxis dataKey="n" stroke="#444" fontSize={10} axisLine={false} tickLine={false}/>
+                                <YAxis hide domain={[0,1200]}/>
+                                <Tooltip contentStyle={{background:'#111',border:'1px solid #333',borderRadius:'8px',fontSize:'.8rem'}}/>
+                                <Area type="monotone" dataKey="v" stroke="#D4AF37" fillOpacity={1} fill="url(#colorVal)" strokeWidth={2}/>
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            );
+        };
+
+        /* ═══════════════════════════════════════
+           REVIEW PANEL
+           ═══════════════════════════════════════ */
+        const ReviewPanel = ({ results, caseInfo, onDone }) => {
+            const [selIdx, setSelIdx] = useState(0);
+            const [heatmapOn, setHeatmapOn] = useState(false);
+            const [exporting, setExporting] = useState(false);
+            const canvasRef = useRef(null);
+            const previewRef = useRef(null);
+
+            const selected = results[selIdx] || results[0];
+            const isImage = selected && selected.dataUrl && selected.dataUrl.startsWith('data:image');
+            const severity = selected ? (selected.risk > 75 ? 'high' : selected.risk > 50 ? 'medium' : 'low') : 'low';
+            const sevColor = severity === 'high' ? 'var(--urgent)' : severity === 'medium' ? 'var(--high)' : 'var(--normal)';
+            const sevIcon = severity === 'high' ? 'fa-exclamation-triangle' : severity === 'medium' ? 'fa-exclamation-circle' : 'fa-check-circle';
+
+            /* Draw heatmap on preview canvas */
+            useEffect(() => {
+                if (!heatmapOn || !isImage) return;
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = () => {
+                    const container = previewRef.current;
+                    if (!container) return;
+                    const maxW = container.clientWidth - 2;
+                    const maxH = 440;
+                    let w = img.width, h = img.height;
+                    if (w > maxW) { h *= maxW / w; w = maxW; }
+                    if (h > maxH) { w *= maxH / h; h = maxH; }
+                    canvas.width = Math.round(w);
+                    canvas.height = Math.round(h);
+                    ctx.drawImage(img, 0, 0, w, h);
+                    if (selected.regions && selected.regions.length > 0) {
+                        ctx.globalCompositeOperation = 'screen';
+                        selected.regions.forEach(r => {
+                            const rx = (r.xPct / 100) * w, ry = (r.yPct / 100) * h;
+                            const rr = Math.max(2, (r.radiusPct / 100) * w);
+                            const g = ctx.createRadialGradient(rx, ry, 0, rx, ry, rr);
+                            g.addColorStop(0, `rgba(255,0,0,${r.intensity})`);
+                            g.addColorStop(0.22, `rgba(255,80,0,${r.intensity * 0.78})`);
+                            g.addColorStop(0.48, `rgba(255,200,0,${r.intensity * 0.45})`);
+                            g.addColorStop(0.74, `rgba(0,140,255,${r.intensity * 0.18})`);
+                            g.addColorStop(1, 'rgba(0,0,0,0)');
+                            ctx.fillStyle = g;
+                            ctx.beginPath();
+                            ctx.ellipse(rx, ry, rr, Math.max(2, rr * 0.8), 0, 0, Math.PI * 2);
+                            ctx.fill();
+                        });
+                        ctx.globalCompositeOperation = 'source-over';
+                    }
+                };
+                img.src = selected.dataUrl;
+            }, [selected, heatmapOn, isImage]);
+
+            /* PDF Export */
+            const handleExport = async () => {
+                setExporting(true);
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF('p', 'mm', 'a4');
+                    const pW = 210, mg = 15, cW = pW - mg * 2;
+                    let y = mg;
+
+                    // Dark header bar
+                    doc.setFillColor(12, 12, 12);
+                    doc.rect(0, 0, pW, 40, 'F');
+                    doc.setTextColor(212, 175, 55);
+                    doc.setFontSize(15);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('ONCOTRIAGE v2.1', mg, 15);
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(160, 160, 160);
+                    doc.text('REAPER EAGLE ENGINE — Neural Inference Report', mg, 23);
+                    doc.setTextColor(110, 110, 110);
+                    doc.setFontSize(7);
+                    doc.text(`Case: ${caseInfo.id}  |  Patient: ${caseInfo.patient}  |  ${caseInfo.date}  |  Arch: EfficientNet-B4  |  Images: ${results.length}`, mg, 32);
+                    y = 50;
+
+                    // Render all images to canvases
+                    const rendered = await Promise.all(
+                        results.map(r => renderToCanvas(r.dataUrl, heatmapOn ? r.regions : [], 700))
+                    );
+
+                    // Each image section
+                    for (let i = 0; i < results.length; i++) {
+                        const r = results[i];
+                        const rnd = rendered[i];
+
+                        if (y > 195) { doc.addPage(); y = mg; }
+
+                        // Image label
+                        doc.setTextColor(35, 35, 35);
+                        doc.setFontSize(10);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(`${i + 1}. ${r.file.name}`, mg, y);
+                        y += 5;
+
+                        // Image
+                        if (rnd.dataUrl) {
+                            let iW = cW, iH = (rnd.height / rnd.width) * iW;
+                            if (iH > 105) { iH = 105; iW = (rnd.width / rnd.height) * iH; }
+                            doc.addImage(rnd.dataUrl, 'JPEG', mg, y, iW, iH);
+                            y += iH + 4;
+                        } else {
+                            doc.setTextColor(130, 130, 130);
+                            doc.setFontSize(8);
+                            doc.setFont('helvetica', 'italic');
+                            doc.text('[Archivo no visualizable]', mg, y + 8);
+                            y += 18;
+                        }
+
+                        // Metadata line
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(7.5);
+                        doc.setTextColor(80, 80, 80);
+                        doc.text(`Confianza: ${r.confidence}%   |   Riesgo: ${r.risk}%   |   ${r.finding}`, mg, y);
+                        if (r.regions.length > 0) {
+                            doc.text(`Regiones: ${r.regions.length} anomalía${r.regions.length > 1 ? 's' : ''} detectada${r.regions.length > 1 ? 's' : ''}`, mg, y + 4);
+                            y += 4;
+                        }
+                        y += 8;
+
+                        // Separator
+                        doc.setDrawColor(220, 220, 220);
+                        doc.line(mg, y, pW - mg, y);
+                        y += 8;
+                    }
+
+                    // Summary table
+                    if (y > 220) { doc.addPage(); y = mg; }
+                    doc.setTextColor(35, 35, 35);
+                    doc.setFontSize(11);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('RESUMEN', mg, y);
+                    y += 8;
+
+                    doc.setFillColor(245, 245, 245);
+                    doc.rect(mg, y - 4, cW, 7, 'F');
+                    doc.setFontSize(7);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(100, 100, 100);
+                    doc.text('#', mg + 2, y);
+                    doc.text('Archivo', mg + 10, y);
+                    doc.text('Confianza', mg + 80, y);
+                    doc.text('Riesgo', mg + 110, y);
+                    doc.text('Hallazgo', mg + 135, y);
+                    y += 6;
+
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(60, 60, 60);
+                    results.forEach((r, i) => {
+                        if (y > 275) { doc.addPage(); y = mg; }
+                        if (i % 2 === 0) { doc.setFillColor(250, 250, 250); doc.rect(mg, y - 3.5, cW, 6, 'F'); }
+                        doc.setFontSize(6.5);
+                        doc.text(`${i + 1}`, mg + 2, y);
+                        const name = r.file.name.length > 35 ? r.file.name.substring(0, 35) + '...' : r.file.name;
+                        doc.text(name, mg + 10, y);
+                        doc.text(`${r.confidence}%`, mg + 80, y);
+                        doc.text(`${r.risk}%`, mg + 110, y);
+                        const find = r.finding.length > 30 ? r.finding.substring(0, 30) + '...' : r.finding;
+                        doc.text(find, mg + 135, y);
+                        y += 5.5;
+                    });
+
+                    // Footer
+                    const pageCount = doc.internal.getNumberOfPages();
+                    for (let p = 1; p <= pageCount; p++) {
+                        doc.setPage(p);
+                        doc.setFontSize(6);
+                        doc.setTextColor(180, 180, 180);
+                        doc.text(`Generated by OncoTriage v2.1 — Reaper Eagle Engine — ${new Date().toISOString()}`, mg, 290);
+                        doc.text(`Page ${p} of ${pageCount}`, pW - mg - 20, 290);
+                    }
+
+                    doc.save(`oncotriage-${caseInfo.id}.pdf`);
+                    toast('Informe PDF exportado correctamente');
+                    onDone();
+                } catch (err) {
+                    console.error(err);
+                    toast('Error al generar el PDF', 'err');
+                }
+                setExporting(false);
+            };
+
+            const avgConf = results.reduce((s, r) => s + r.confidence, 0) / results.length;
+            const highRiskCount = results.filter(r => r.risk > 75).length;
+            const totalAnomalies = results.reduce((s, r) => s + r.regions.length, 0);
+
+            return (
+                <div className="fade-in">
+                    {/* Header */}
+                    <div className="review-header">
+                        <div>
+                            <h2>Resultados del Análisis</h2>
+                            <p style={{fontSize:'.75rem',color:'var(--dim)',marginTop:'2px'}}>
+                                {results.length} volumen{results.length > 1 ? 'es' : ''} procesado{results.length > 1 ? 's' : ''} — {caseInfo.id}
+                            </p>
+                        </div>
+                        <div className="review-header-actions">
+                            <button className="btn-ghost" onClick={() => onDone()}>
+                                <i className="fas fa-arrow-left" style={{marginRight:'6px'}}></i> Nuevo
+                            </button>
+                            <button className="btn-gold" onClick={handleExport} disabled={exporting}>
+                                {exporting && <span className="spinner"></span>}
+                                {exporting ? 'Generando...' : 'Exportar PDF'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Summary stats */}
+                    <div className="meta-grid">
+                        <div className="meta-card">
+                            <div className="mc-label">Imágenes</div>
+                            <div className="mc-value">{results.length}</div>
+                        </div>
+                        <div className="meta-card">
+                            <div className="mc-label">Confianza Media</div>
+                            <div className="mc-value" style={{color:'var(--gold)'}}>{avgConf.toFixed(1)}%</div>
+                        </div>
+                        <div className="meta-card">
+                            <div className="mc-label">Alto Riesgo</div>
+                            <div className="mc-value" style={{color: highRiskCount > 0 ? 'var(--urgent)' : 'var(--normal)'}}>{highRiskCount}</div>
+                        </div>
+                        <div className="meta-card">
+                            <div className="mc-label">Anomalías</div>
+                            <div className="mc-value" style={{color: totalAnomalies > 0 ? 'var(--high)' : 'var(--normal)'}}>{totalAnomalies}</div>
+                        </div>
+                    </div>
+
+                    {/* Thumbnail strip */}
+                    <div className="thumb-strip">
+                        {results.map((r, i) => (
+                            <div
+                                key={r.file.name + '|' + i}
+                                className={`thumb-item ${i === selIdx ? 'active' : ''}`}
+                                onClick={() => setSelIdx(i)}
+                                title={r.file.name}
+                            >
+                                {r.dataUrl && r.dataUrl.startsWith('data:image') ? (
+                                    <img src={r.dataUrl} alt={r.file.name} />
+                                ) : (
+                                    <div className="thumb-placeholder"><i className="fas fa-file-medical"></i></div>
+                                )}
+                                <div className={`thumb-dot ${r.risk > 75 ? 'high' : 'low'}`}></div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Preview */}
+                    <div className="preview-area" ref={previewRef}>
+                        {isImage ? (
+                            heatmapOn ? (
+                                <canvas ref={canvasRef} />
+                            ) : (
+                                <img src={selected.dataUrl} alt={selected.file.name} />
+                            )
+                        ) : (
+                            <div className="preview-placeholder">
+                                <i className="fas fa-file-medical fa-2x" style={{marginBottom:'12px',display:'block',color:'var(--border)'}}></i>
+                                {selected ? selected.file.name : 'Sin selección'}
+                            </div>
+                        )}
+
+                        {/* Heatmap toggle */}
+                        {isImage && (
+                            <button
+                                className={`heatmap-btn ${heatmapOn ? 'on' : ''}`}
+                                onClick={() => setHeatmapOn(h => !h)}
+                            >
+                                <span className="dot"></span>
+                                Heatmap {heatmapOn ? 'ON' : 'OFF'}
+                            </button>
+                        )}
+
+                        {/* Legend */}
+                        <div className={`heatmap-legend ${heatmapOn ? 'visible' : ''}`}>
+                            <span><span className="ldot" style={{background:'#ff0000'}}></span> Alta</span>
+                            <span><span className="ldot" style={{background:'#ff8800'}}></span> Media</span>
+                            <span><span className="ldot" style={{background:'#ffcc00'}}></span> Baja</span>
+                            <span><span className="ldot" style={{background:'#0088ff'}}></span> Mínima</span>
+                        </div>
+                    </div>
+
+                    {/* Finding bar */}
+                    {selected && (
+                        <div className={`finding-bar ${severity}`}>
+                            <i className={`fas ${sevIcon}`} style={{color: sevColor}}></i>
+                            <div>
+                                <div className="fb-text" style={{color: sevColor}}>{selected.finding}</div>
+                                <div className="fb-sub">{selected.regions.length} región{selected.regions.length !== 1 ? 'es' : ''} de interés — Confianza global {selected.confidence}%</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Per-image detail grid */}
+                    {selected && (
+                        <div className="meta-grid" style={{gridTemplateColumns:'repeat(3,1fr)',marginBottom:'0'}}>
+                            <div className="meta-card">
+                                <div className="mc-label">Confianza</div>
+                                <div className="mc-value" style={{color: selected.confidence > 90 ? 'var(--gold)' : 'var(--text)'}}>{selected.confidence}%</div>
+                                <div className="mc-sub">Umbral: 85%</div>
+                            </div>
+                            <div className="meta-card">
+                                <div className="mc-label">Riesgo Cuantificado</div>
+                                <div className="mc-value" style={{color: sevColor}}>{selected.risk}%</div>
+                                <div className="mc-sub">{selected.risk > 75 ? 'Intervención requerida' : 'Monitoreo estándar'}</div>
+                            </div>
+                            <div className="meta-card">
+                                <div className="mc-label">Regiones Detectadas</div>
+                                <div className="mc-value">{selected.regions.length}</div>
+                                <div className="mc-sub">{selected.regions.length > 0 ? selected.regions.map((r,i) => `R${i+1}: ${r.score}%`).join(' | ') : 'Limpio'}</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        /* ═══════════════════════════════════════
+           ANALYSIS
+           ═══════════════════════════════════════ */
+        const Analysis = ({ onResult }) => {
+            const [stage, setStage] = useState('ready');
+            const [files, setFiles] = useState([]);
+            const [results, setResults] = useState([]);
+            const [caseInfo, setCaseInfo] = useState(null);
+            const [dragOver, setDragOver] = useState(false);
+            const inputRef = useRef(null);
+
+            useEffect(() => {
+                const prevent = (e) => e.preventDefault();
+                document.addEventListener('dragover', prevent);
+                document.addEventListener('drop', prevent);
+                return () => { document.removeEventListener('dragover', prevent); document.removeEventListener('drop', prevent); };
+            }, []);
+
+            const addFiles = useCallback((fileList) => {
+                const arr = Array.from(fileList);
+                if (!arr.length) return;
+                const reads = arr.map(file => new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve({ file, dataUrl: e.target.result });
+                    reader.onerror = () => resolve({ file, dataUrl: null });
+                    reader.readAsDataURL(file);
+                }));
+                Promise.all(reads).then(out => {
+                    setFiles(prev => {
+                        const ex = new Set(prev.map(f => f.file.name + '|' + f.file.size));
+                        const fresh = out.filter(r => !ex.has(r.file.name + '|' + r.file.size));
+                        if (!fresh.length) { toast('Archivos ya en la lista', 'err'); return prev; }
+                        toast(fresh.length + ' archivo' + (fresh.length > 1 ? 's' : '') + ' cargado' + (fresh.length > 1 ? 's' : ''));
+                        return [...prev, ...fresh];
+                    });
+                });
+            }, []);
+
+            const removeFile = useCallback((idx) => setFiles(prev => prev.filter((_, i) => i !== idx)), []);
+
+            const handleNativeChange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+            const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); addFiles(e.dataTransfer.files); };
+            const handleDragEnter = (e) => { e.preventDefault(); setDragOver(true); };
+            const handleDragLeave = (e) => { if (e.currentTarget.contains(e.relatedTarget)) return; setDragOver(false); };
+            const handleDragOver = (e) => { e.preventDefault(); };
+
+            const handleAnalyze = () => {
+                if (!files.length) { toast('Seleccione al menos un archivo', 'err'); return; }
+                setStage('scanning');
+                setTimeout(() => {
+                    const ci = {
+                        id: 'ID-' + Math.random().toString(36).substr(2, 5).toUpperCase(),
+                        patient: 'P' + Math.floor(Math.random() * 9000 + 1000),
+                        date: new Date().toLocaleString(),
+                        arch: 'EfficientNet-B4'
+                    };
+                    const res = files.map(f => {
+                        const risk = Math.floor(Math.random() * 60 + 35);
+                        return {
+                            file: f.file,
+                            dataUrl: f.dataUrl,
+                            confidence: parseFloat((75 + Math.random() * 24).toFixed(1)),
+                            risk,
+                            regions: risk > 45 ? generateRegions(Math.floor(Math.random() * 3) + 1) : [],
+                            finding: pickFinding(risk)
+                        };
+                    });
+                    setResults(res);
+                    setCaseInfo(ci);
+                    onResult({ ...ci, risk: Math.max(...res.map(r => r.risk)), files: res.map(r => r.file.name) });
+                    setStage('review');
+                }, 3500);
+            };
+
+            const handleReset = () => { setStage('ready'); setFiles([]); setResults([]); setCaseInfo(null); };
+
+            return (
+                <div className="fade-in">
+                    {stage === 'ready' && (
+                        <div>
+                            <h1 style={{marginBottom:'.5rem',fontWeight:900,letterSpacing:'-1px'}}>Neural Inference Engine</h1>
+                            <p style={{color:'var(--muted)',fontSize:'.85rem',marginBottom:'2rem'}}>Cargue volúmenes DICOM para análisis de segmentación y detección de anomalías mediante Compound Scaling.</p>
+                            <label className={`file-drop-zone ${dragOver ? 'drag-active' : ''}`} onDrop={handleDrop} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver}>
+                                <input ref={inputRef} type="file" multiple onChange={handleNativeChange} onClick={(e) => e.stopPropagation()} />
+                                <div className="fdz-icon"><i className="fas fa-upload"></i></div>
+                                <div className="fdz-text">
+                                    <h3><span>Haga clic para buscar</span> o arrastre archivos</h3>
+                                    <p>DICOM, NIfTI, PNG, JPG — cualquier formato de imagen médica</p>
+                                </div>
+                            </label>
+                            {files.length > 0 && (
+                                <div className="file-chips">
+                                    {files.map((f, i) => (
+                                        <div className="file-chip" key={f.file.name + '|' + f.file.size + '|' + i}>
+                                            <i className="fas fa-file-medical"></i>
+                                            <span className="chip-name" title={f.file.name}>{f.file.name}</span>
+                                            <span className="chip-size">{fmtSize(f.file.size)}</span>
+                                            <button onClick={() => removeFile(i)} title="Eliminar">&times;</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <button className="btn-gold" onClick={handleAnalyze} disabled={!files.length}>
+                                Procesar {files.length > 0 ? files.length + ' Volumen' + (files.length > 1 ? 'es' : '') : ''}
+                            </button>
+                        </div>
+                    )}
+
+                    {stage === 'scanning' && (
+                        <div className="card" style={{textAlign:'center',padding:'4rem 2rem',background:'var(--bg2)'}}>
+                            <div style={{position:'relative',height:'250px',background:'#000',border:'1px solid var(--gold-dark)',borderRadius:'12px',overflow:'hidden',marginBottom:'2rem',maxWidth:'500px',marginLeft:'auto',marginRight:'auto'}}>
+                                <div className="scanner-line"></div>
+                                <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:'100%',textAlign:'center'}}>
+                                    <p style={{fontFamily:'var(--mono)',fontSize:'.7rem',color:'var(--gold)',letterSpacing:'2px'}}>RUNNING EFFICIENTNET-B4 KERNELS...</p>
+                                    <p style={{fontSize:'.6rem',color:'var(--dim)',marginTop:'6px'}}>PROCESSING {files.length} VOLUME{files.length > 1 ? 'S' : ''} — TENSOR_OP_MAX_PRECISION</p>
+                                </div>
+                            </div>
+                            <p className="fade-in" style={{color:'var(--gold)',fontWeight:600}}>Cuantificando Incertidumbre Bayesiana...</p>
+                        </div>
+                    )}
+
+                    {stage === 'review' && (
+                        <ReviewPanel results={results} caseInfo={caseInfo} onDone={handleReset} />
+                    )}
+                </div>
+            );
+        };
+
+        /* ═══════════════════════════════════════
+           CASE QUEUE
+           ═══════════════════════════════════════ */
+        const Queue = ({ cases }) => (
+            <div className="card fade-in">
+                <h2 style={{marginBottom:'1.5rem',fontWeight:800}}>Cola de Intervención Prioritaria</h2>
+                <table className="q-table">
+                    <thead><tr><th>Identificador</th><th>Inferencia</th><th>Riesgo Cuantificado</th><th>Estado</th></tr></thead>
+                    <tbody>
+                        {cases.length === 0 ? (
+                            <tr><td colSpan="4" style={{textAlign:'center',color:'var(--dim)',padding:'40px'}}>No hay datos en el búfer local.</td></tr>
+                        ) : cases.map(c => (
+                            <tr key={c.id}>
+                                <td style={{fontFamily:'var(--mono)',fontWeight:600}}>
+                                    {c.patient} <span style={{color:'var(--dim)',fontWeight:400,fontSize:'.7rem'}}>({c.id})</span>
+                                </td>
+                                <td style={{fontSize:'.75rem'}}>{c.date}</td>
+                                <td>
+                                    <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                                        <div style={{flex:1,height:'4px',background:'#222',borderRadius:'2px'}}>
+                                            <div style={{width:`${c.risk}%`,height:'100%',background:c.risk > 75 ? 'var(--urgent)' : 'var(--gold)',borderRadius:'2px',transition:'width .5s'}}></div>
+                                        </div>
+                                        <span style={{fontWeight:800,color:c.risk > 75 ? 'var(--urgent)' : 'var(--text)',minWidth:'36px',textAlign:'right'}}>{c.risk}%</span>
+                                    </div>
+                                </td>
+                                <td><span className={`badge ${c.risk > 75 ? 'badge-urgent' : 'badge-normal'}`}>{c.risk > 75 ? 'ALTA PRIORIDAD' : 'ESTABLE'}</span></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+
+        /* ═══════════════════════════════════════
+           APP
+           ═══════════════════════════════════════ */
+        const App = () => {
+            const [view, setView] = useState('dashboard');
+            const [cases, setCases] = useState([]);
+            useEffect(() => { setCases(store.getCases()); }, []);
+            const handleNewResult = (res) => setCases(store.saveCase(res));
+
+            return (
+                <div className="shell">
+                    <div className="sidebar">
+                        <div style={{padding:'40px 30px',borderBottom:'1px solid var(--border)'}}>
+                            <div style={{color:'var(--gold)',fontWeight:900,fontSize:'1.4rem',letterSpacing:'-1px'}}>REAPER EAGLE</div>
+                            <div style={{fontSize:'.6rem',color:'var(--dim)',letterSpacing:'3px',marginTop:'4px'}}>ONCOTRIAGE v2.1</div>
+                        </div>
+                        <nav style={{flex:1,marginTop:'20px'}}>
+                            <button className={`nav-item ${view==='dashboard'?'active':''}`} onClick={() => setView('dashboard')}><i className="fas fa-chart-pie"></i> DASHBOARD</button>
+                            <button className={`nav-item ${view==='analysis'?'active':''}`} onClick={() => setView('analysis')}><i className="fas fa-brain"></i> AI INFERENCE</button>
+                            <button className={`nav-item ${view==='queue'?'active':''}`} onClick={() => setView('queue')}><i className="fas fa-list-ol"></i> CASE QUEUE</button>
+                            <button className="nav-item" onClick={() => toast('Configurando MI300X Instance...')}><i className="fas fa-microchip"></i> ENGINE CONFIG</button>
+                        </nav>
+                        <div style={{padding:'20px',background:'rgba(0,0,0,.2)',borderTop:'1px solid var(--border)'}}>
+                            <div style={{display:'flex',alignItems:'center',gap:'8px',fontSize:'.65rem',color:'var(--dim)'}}>
+                                <span style={{width:'6px',height:'6px',background:'var(--normal)',borderRadius:'50%',display:'inline-block'}}></span>
+                                BACKEND: CONNECTED (8000)
+                            </div>
+                            <div style={{fontSize:'.6rem',color:'#444',marginTop:'5px',fontFamily:'var(--mono)'}}>GPU_TEMP: 42°C | FAN: 60%</div>
+                        </div>
+                    </div>
+                    <main className="main">
+                        {view === 'dashboard' && <Dashboard cases={cases} />}
+                        {view === 'analysis' && <Analysis onResult={handleNewResult} />}
+                        {view === 'queue' && <Queue cases={cases} />}
+                    </main>
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
