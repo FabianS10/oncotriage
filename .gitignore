@@ -4,4 +4,5 @@ echo .env >> .gitignore
 echo *.db >> .gitignore
 echo __pycache__/ >> .gitignore
 echo *.pyc >> .gitignore
-echo *.pth >> .gitignore
+echo *.pth >> .gitignore*.pth 
+node_modules/.cache/ 
